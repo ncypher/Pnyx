@@ -13,21 +13,26 @@ Return only JSON: text (spoken reply), claim (your core claim under 25 words),
 move (opening, challenge, concession, question, or synthesis)."""
 
 def safe_error(exc):
-    from openai import AuthenticationError, PermissionDeniedError, NotFoundError, RateLimitError, APIConnectionError
+    from openai import AuthenticationError, PermissionDeniedError, NotFoundError, RateLimitError, APIConnectionError, APITimeoutError, BadRequestError
     if isinstance(exc, AuthenticationError):
         return "Key not accepted. Replace this orator's key and test again."
     if isinstance(exc, (PermissionDeniedError, NotFoundError)):
         return "This model is unavailable to this key. Check its name and account access."
     if isinstance(exc, RateLimitError):
         return "API credits or rate limit reached. Check this account's usage and try again."
+    if isinstance(exc, APITimeoutError):
+        return "The model did not finish within 35 seconds. Retry or choose a faster text model."
     if isinstance(exc, APIConnectionError):
         return "Could not reach OpenAI. Check the connection and try again."
+    if isinstance(exc, BadRequestError):
+        return "The model rejected the request settings. Choose a Responses API text model that supports JSON output, such as gpt-4.1-mini."
     return "The request did not return a usable response. Check the model or try again."
 
 def connect(api_key, model, payload, instructions=None):
     from openai import OpenAI
     with OpenAI(api_key=api_key, timeout=35, max_retries=0) as client:
-        args = dict(model=model, input=payload, max_output_tokens=1200, store=False)
+        args = dict(model=model, input=payload, max_output_tokens=2400, store=False,
+                    text={"format": {"type": "json_object"}})
         if instructions:
             args["instructions"] = instructions
         return client.responses.create(**args)
@@ -35,15 +40,26 @@ def connect(api_key, model, payload, instructions=None):
 def reply(state, speaker, key, model):
     try:
         response = connect(key, model, json.dumps(context_for(state, speaker), ensure_ascii=False), INSTRUCTIONS)
-        return validate_reply(response.output_text)
     except Exception as exc:
         raise ValueError(safe_error(exc)) from None
+    return read_reply(response)
+
+def read_reply(response):
+    if getattr(response, "status", "completed") == "incomplete":
+        raise ValueError("The model ran out of output space before finishing. Try a non-reasoning text model or retry with a shorter discussion.")
+    if not response.output_text.strip():
+        raise ValueError("The model returned no debate text. It may have declined the request; try rephrasing the topic.")
+    try:
+        return validate_reply(response.output_text)
+    except (ValueError, TypeError):
+        raise ValueError("The model connected but returned an invalid debate format. Retry the turn or choose a model that supports JSON output.") from None
 
 def check(key, model):
     try:
-        result = connect(key, model, "Reply with OK.")
-        if result.status == "completed" and result.output_text.strip():
-            return True, "Connected — this key and model returned a reply."
-        return False, "Request accepted, but no complete text returned. Try another text model."
+        result = connect(key, model, 'Return JSON with text="Ready", claim="Ready to debate", move="opening".', INSTRUCTIONS)
+        read_reply(result)
+        return True, "Ready to debate — this key and model passed the dialogue-format test."
+    except ValueError as exc:
+        return False, str(exc)
     except Exception as exc:
         return False, safe_error(exc)

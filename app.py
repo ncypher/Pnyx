@@ -5,6 +5,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from engine import DEFAULTS, TOPICS, new_debate, add_reply, moderate, demo_reply, export_debate, transcript
 from dialogue import reply, check
+from profiles import PROFILES, DEBATES
 
 ROOT = Path(__file__).parent
 garden = components.declare_component("pnyx_garden", path=str(ROOT / "scene"))
@@ -30,16 +31,38 @@ def receipt(text):
 
 def invalidate(cid):
     st.session_state.pop(f"checked_{cid}", None)
+    if cid == "a":
+        st.session_state.pop("checked_b", None)
+
+def load_profile(cid, profile):
+    person = next(c for c in state["cast"] if c["id"] == cid)
+    person.update(deepcopy(PROFILES[profile]))
+    for field in ("name", "position", "style", "color", "robe"):
+        st.session_state.pop(f"{field}_{cid}", None)
+    receipt(f"{profile} applied. You can edit the interpretation below.")
+
+def load_debate():
+    topic, left, right = DEBATES[st.session_state["debate_template"]]
+    load_profile("a", left)
+    load_profile("b", right)
+    replacement = new_debate(topic, state["cast"])
+    replacement["revision"] = state["revision"] + 1
+    st.session_state.debate = replacement
+    receipt("Debate template loaded. Characters and question are ready; connection settings were kept.")
 
 connections = {}
 with st.sidebar:
     st.markdown("### The director’s chair")
     mode = st.radio("Voices", ["Demo", "Live AI"], help="Demo uses scripted exchanges. Live AI uses each orator's own OpenAI connection.")
     st.caption("Two minds. Two connections. Use the same model or give each a different one.")
+    shared = st.checkbox("Use the first key for both orators", value=True, key="shared_key", on_change=invalidate, args=("b",))
     for c in state["cast"]:
         cid = c["id"]
         with st.expander(f'{c["name"]} · connection', expanded=mode == "Live AI"):
-            key = st.text_input("OpenAI API key", type="password", key=f"key_{cid}", on_change=invalidate, args=(cid,))
+            entered = st.text_input("OpenAI API key", type="password", key=f"key_{cid}", on_change=invalidate, args=(cid,), disabled=cid == "b" and shared)
+            key = connections["a"][0] if cid == "b" and shared else entered
+            if cid == "b" and shared:
+                st.caption("Using the first orator's key. This orator still has its own model choice.")
             model = st.text_input("Model", value="gpt-4.1-mini", key=f"model_{cid}", on_change=invalidate, args=(cid,))
             connections[cid] = (key.strip(), model.strip())
             if st.button("Test connection", key=f"test_{cid}", disabled=not key.strip() or not model.strip()):
@@ -60,11 +83,21 @@ with st.sidebar:
 st.markdown('<div class="eyebrow">A SMALL STAGE FOR LARGE QUESTIONS</div>', unsafe_allow_html=True)
 st.title("Pnyx")
 st.markdown('<p class="intro">A garden of arguments. Two orators. Room to change your mind.</p>', unsafe_allow_html=True)
+if mode == "Live AI":
+    missing = [c["name"] for c in state["cast"] if not all(connections[c["id"]])]
+    if missing:
+        st.warning("Connection setup needed for: " + ", ".join(missing) + ". Open the sidebar to enter a key and model.")
+    else:
+        st.caption("Live AI selected · both orators have connection settings. Use Test connection to verify each model.")
 if "receipt" in st.session_state:
     st.success(st.session_state.receipt)
 debate_tab, cast_tab = st.tabs(["The gathering", "Shape the orators"])
 with cast_tab:
-    st.caption("Fictional characters inspired by ancient Athens. Their positions are yours to shape.")
+    st.caption("Philosopher-inspired interpretations and imagined future voices—not authentic quotations or historical reconstructions.")
+    for col, c in zip(st.columns(2), state["cast"]):
+        with col:
+            profile = st.selectbox(f'Profile for {c["name"]}', list(PROFILES), key=f'profile_{c["id"]}')
+            st.button("Apply profile", key=f'apply_{c["id"]}', on_click=load_profile, args=(c["id"], profile))
     with st.form("characters"):
         edits = []
         for col, c in zip(st.columns(2), state["cast"]):
@@ -72,7 +105,9 @@ with cast_tab:
                 st.markdown(f'### {c["name"]}')
                 edits.append(dict(c, name=st.text_input("Name", c["name"], max_chars=30, key=f'name_{c["id"]}'),
                                   position=st.text_area("Starting position / convictions", c["position"], max_chars=1200, key=f'position_{c["id"]}'),
-                                  style=st.text_area("Speaking style", c["style"], max_chars=700, key=f'style_{c["id"]}')))
+                                  style=st.text_area("Speaking style", c["style"], max_chars=700, key=f'style_{c["id"]}'),
+                                  color=st.color_picker("Sash and speaker color", c["color"], key=f'color_{c["id"]}'),
+                                  robe=st.color_picker("Robe color", c.get("robe", "#ece3cb"), key=f'robe_{c["id"]}')))
         if st.form_submit_button("Save orators", type="primary"):
             if all(c["name"].strip() and c["position"].strip() for c in edits):
                 state["cast"] = edits
@@ -82,6 +117,10 @@ with cast_tab:
                 st.error("Give both orators a name and a starting position.")
 
 with debate_tab:
+    with st.expander("Debates across time"):
+        st.selectbox("Choose a ready-made gathering", list(DEBATES), key="debate_template")
+        st.caption("Loads the question and both profiles, replacing the current discussion. Download it first to keep it. Modern topics are evergreen prompts, not live news briefings.")
+        st.button("Load debate template", on_click=load_debate)
     st.markdown(f'<div class="topic">{esc(state["topic"])}</div>', unsafe_allow_html=True)
     stage, discussion = st.columns([1.45, 1], gap="large")
     with stage:

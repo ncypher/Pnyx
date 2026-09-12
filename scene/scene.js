@@ -40,7 +40,7 @@ try{
  const people=[];
  function person(i,x,z,angle){
   const root=new THREE.Group();root.position.set(x,.72,z);root.rotation.y=angle;scene.add(root);
-  const body=new THREE.Group();root.add(body);const skin=mat(i?'#a77960':'#d1a080'),hair=mat(i?'#4b4240':'#604c3e'),accent=mat(state.cast[i].color);
+  const body=new THREE.Group();root.add(body);const skin=mat(i?'#a77960':'#d1a080'),hair=mat(i?'#4b4240':'#604c3e'),accent=mat(state.cast[i].color),robe=mat(state.cast[i].robe||'#ece3cb');
   for(const dx of [-.17,.17])box(body,dx,.06,.08,.18,.1,.32,dark);
   cyl(body,0,.55,0,.26,.43,1,robe,12);ball(body,0,1.04,0,.31,robe,1,1.35,.8);
   const sash=box(body,.10,.91,.22,.17,.81,.06,accent);sash.rotation.z=-.23;const belt=cyl(body,0,.81,0,.30,.30,.055,gold,12);belt.scale.z=.8;
@@ -52,7 +52,7 @@ try{
   const arms=[];for(const sign of [-1,1]){const arm=new THREE.Group();arm.position.set(sign*.26,1.18,0);body.add(arm);ball(arm,sign*.1,-.16,0,.15,robe,.9,1.6,.9);ball(arm,sign*.12,-.38,.015,.09,skin);arms.push(arm);}
   const ring=new THREE.Mesh(new THREE.TorusGeometry(.53,.022,8,48),new THREE.MeshBasicMaterial({color:state.cast[i].color}));ring.rotation.x=Math.PI/2;ring.position.y=.015;root.add(ring);
   const label=document.createElement('div');label.className='label';stage.append(label);
-  people.push({root,body,head,mouth,arms,ring,label});
+  people.push({root,body,head,mouth,arms,ring,label,robe,accent});
  }
  person(0,-1.25,.2,.65);person(1,1.25,.2,-.65);
  const motes=[];for(let i=0;i<20;i++){const m=ball(scene,0,0,0,.017,new THREE.MeshBasicMaterial({color:'#f4dbac'}));motes.push(m);}
@@ -71,7 +71,7 @@ try{
  $('#sound').onclick=async()=>{try{audio ||= new (window.AudioContext||window.webkitAudioContext)();sound=!sound;if(sound)await audio.resume();else await audio.suspend();$('#sound').textContent=sound?'Sound on':'Sound off';$('#sound').setAttribute('aria-pressed',String(sound));}catch{sound=false;$('#sound').textContent='Sound unavailable';}};
  function mumble(i){if(!sound||!audio||audio.state!=='running'||document.hidden||audio.currentTime<nextTone)return;const t=audio.currentTime;nextTone=t+.23+Math.random()*.15;const o=audio.createOscillator(),f=audio.createBiquadFilter(),g=audio.createGain();o.type='sawtooth';o.frequency.value=(i?115:165)*(1+Math.random()*.15);f.type='bandpass';f.Q.value=3;f.frequency.setValueAtTime(350,t);f.frequency.exponentialRampToValueAtTime(900,t+.08);f.frequency.exponentialRampToValueAtTime(400,t+.2);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.03,t+.03);g.gain.linearRampToValueAtTime(0,t+.23);o.connect(f);f.connect(g);g.connect(audio.destination);o.start(t);o.stop(t+.24);o.onended=()=>{o.disconnect();f.disconnect();g.disconnect();};}
  let lastId=-1,lastRevision=-1;
- apply=()=>{people.forEach((p,i)=>p.label.textContent=state.cast[i].name);const lines=state.lines||[],sig=JSON.stringify([state.revision,lines.map(x=>x.id)]);$('#replay').disabled=!lines.length;if(sig!==signature){const fresh=state.revision===lastRevision?lines.filter(x=>x.id>lastId):lines;signature=sig;lastRevision=state.revision;lastId=lines.at(-1)?.id??-1;play(fresh.length?fresh:lines);}};apply();
+ apply=()=>{people.forEach((p,i)=>{p.label.textContent=state.cast[i].name;p.robe.color.set(state.cast[i].robe||'#ece3cb');p.accent.color.set(state.cast[i].color);p.ring.material.color.set(state.cast[i].color);});const lines=state.lines||[],sig=JSON.stringify([state.revision,lines.map(x=>x.id)]);$('#replay').disabled=!lines.length;if(sig!==signature){const fresh=state.revision===lastRevision?lines.filter(x=>x.id>lastId):lines;signature=sig;lastRevision=state.revision;lastId=lines.at(-1)?.id??-1;play(fresh.length?fresh:lines);}};apply();
  function resize(){const w=stage.clientWidth,h=stage.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();height();}new ResizeObserver(resize).observe(stage);new ResizeObserver(height).observe($('#subtitle'));resize();
  const clock=new THREE.Clock(),point=new THREE.Vector3(),reduced=matchMedia('(prefers-reduced-motion: reduce)');
  renderer.setAnimationLoop(()=>{const t=clock.getElapsedTime();orbit.update();camera.updateMatrixWorld();people.forEach((p,i)=>{const active=current?.speaker===state.cast[i].id,talking=active&&!paused&&performance.now()<until;p.ring.visible=active;if(talking)mumble(i);

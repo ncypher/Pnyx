@@ -2,6 +2,20 @@
 
 **A garden of arguments. Two orators. Room to change your mind.**
 
+[Enter the floating garden](https://pnyx-floating-garden.streamlit.app/)
+
+### Profiles and ready-made debates
+
+Open **Debates across time** to load a question and a pair of profiles: Athens meets the machine, Freedom across the centuries, A letter from 2400, The automated newsroom, or The city under watch. Loading a template replaces the discussion; download it first to keep it. Connection settings remain intact.
+
+Under **Shape the orators**, apply Socratic, Stoic, Mill-inspired, care-ethics, or speculative future profiles. Edit their prompts, robe color, and sash color. These are creative interpretations, not authentic quotations or historical reconstructions. Modern topics are evergreen prompts, not live news reports.
+
+### If live dialogue does not start
+
+Select **Live AI**. **Use the first key for both orators** is on by default; enter your key once and choose each model separately. Turn it off for separate accounts. Test each connection: the test now checks the same JSON dialogue format used by actual turns. The app distinguishes missing settings, authentication/access problems, timeouts, incomplete output, and invalid reply format. Tests and turns use API credits.
+
+Browser-extension messages and iframe feature warnings do not report the server-side API result. If a turn fails, use the message shown inside Pnyx to diagnose it. No raw API error text or key is shown. JSON output is requested explicitly; a model supporting the Responses API and JSON mode is required.
+
 A miniature Athenian-inspired debate garden built with Streamlit and Three.js. Two fictional orators take turns responding to each other's arguments while you set the question, shape their perspectives, or step up to the moderator's lectern.
 
 ## In the garden
@@ -31,7 +45,7 @@ On Windows, activate with `.venv\Scripts\Activate.ps1`. On macOS/Linux, use `sou
 
 Start in **Demo**, choose a question, and click **One exchange · 2 turns**. Edit the characters under **Shape the orators**. In **Live AI**, enter each orator's key/model in the sidebar and test them independently. Tests and live turns incur API usage charges. The default model name is `gpt-4.1-mini`; you can enter another compatible OpenAI text model.
 
-For Streamlit Community Cloud, select this repository, branch `main`, and entrypoint `app.py`. No hosted app URL has been assigned in this repository yet.
+For Streamlit Community Cloud, select this repository, branch `main`, and entrypoint `app.py`.
 
 ## How dialogue works
 
