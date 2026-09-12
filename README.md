@@ -20,13 +20,13 @@ A miniature Athenian-inspired debate garden built with Streamlit and Three.js. T
 
 ## In the garden
 
-- A floating terrace, olive tree, ruined columns, torchlight, and two animated orators.
+- An inlaid astronomical mosaic, carved column capitals, swaying banners, flowers, distant islands, and two orators with draped robes and detailed faces.
 - Small speaker cues with full subtitles below the scene, replay, pause, manual subtitle advance, and relaxed/standard reading pace.
 - Optional soft two-note chimes distinguish the orators at a handoff. No continuous mumbling; sound starts off and has a volume control.
 - Separate OpenAI API keys and model names for each orator. Use the same model or compare two different text models available to your accounts.
 - Connection tests with clear success/error feedback. Changing a key or model clears its previous result.
 - Editable starting positions and speaking styles with save confirmation.
-- One argument or one two-turn exchange at a time. The next orator receives the preceding argument, the complete current debate, and moderator interventions.
+- One manual argument or an automatic conversation of 1–5 exchanges (2–10 turns). Each reply is displayed and given reading time before the next API request begins.
 - Scripted demo mode requiring no key. This demonstrates the flow; it is not generative reasoning.
 - Moderator questions, redirects, and requests for closing statements.
 - Markdown transcript and JSON data downloads. No automatic winner or scoring.
@@ -44,13 +44,15 @@ streamlit run app.py
 
 On Windows, activate with `.venv\Scripts\Activate.ps1`. On macOS/Linux, use `source .venv/bin/activate`.
 
-Start in **Demo**, choose a question, and click **One exchange · 2 turns**. Edit the characters under **Shape the orators**. In **Live AI**, enter each orator's key/model in the sidebar and test them independently. Tests and live turns incur API usage charges. The default model name is `gpt-4.1-mini`; you can enter another compatible OpenAI text model.
+Start in **Demo**, choose a question and conversation length, and click **Start conversation**. Use **Pause** below the garden to hold the current turn, or **Stop conversation** to end the sequence. **Next argument** remains available for manual turns when no sequence is running. Edit the characters under **Shape the orators**. In **Live AI**, enter each orator's key/model in the sidebar and test them independently. Tests and live turns incur API usage charges. The default model name is `gpt-4.1-mini`; you can enter another compatible OpenAI text model.
 
 For Streamlit Community Cloud, select this repository, branch `main`, and entrypoint `app.py`.
 
 ## How dialogue works
 
-Each model call plays exactly one speaker. Its instructions require a specific response to the opponent's latest argument, followed by a reason, counterexample, concession, or question. Characters can change their minds. Moderator interventions enter the shared transcript without consuming either speaker's turn. A batch stops after two calls; nothing runs in the background. A failed call leaves that turn unconsumed. The model's adherence is not guaranteed, and arguments are not fact-checked or web-researched.
+Each model call plays exactly one speaker. Its instructions require a specific response to the opponent's latest argument, followed by a reason, counterexample, concession, or question. Fresh analogies and thought experiments are encouraged. Characters can change their minds. Moderator interventions enter the shared transcript without consuming either speaker's turn.
+
+Automatic conversations are bounded by the chosen cycle length. The browser acknowledges completion of each displayed subtitle before the server requests another reply; duplicate and stale acknowledgments are ignored. Pausing or hiding the tab holds the reading phase. Stop prevents subsequent requests, though an in-flight request may finish. Changing connections, mode, profiles, question, or adding a moderator intervention stops the sequence. No unattended scheduled job is created. A failed call stops the sequence and leaves that turn unconsumed. The model's adherence is not guaranteed, and arguments are not fact-checked or web-researched.
 
 Debates stop at 60 entries so the full discussion remains bounded. Begin a new debate to reset the discussion while keeping your character settings. Download first if you want to keep the old discussion.
 

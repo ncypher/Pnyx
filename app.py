@@ -6,6 +6,7 @@ import streamlit.components.v1 as components
 from engine import DEFAULTS, TOPICS, new_debate, add_reply, moderate, demo_reply, export_debate, transcript, idea_thread
 from dialogue import reply, check
 from profiles import PROFILES, DEBATES
+from sequence import start_sequence, wait_for_reading, acknowledge
 
 ROOT = Path(__file__).parent
 garden = components.declare_component("pnyx_garden", path=str(ROOT / "scene"))
@@ -29,12 +30,17 @@ state = st.session_state.debate
 def receipt(text):
     st.session_state.receipt = text
 
+def stop_sequence():
+    st.session_state.pop("sequence", None)
+
 def invalidate(cid):
+    stop_sequence()
     st.session_state.pop(f"checked_{cid}", None)
     if cid == "a":
         st.session_state.pop("checked_b", None)
 
 def load_profile(cid, profile):
+    stop_sequence()
     person = next(c for c in state["cast"] if c["id"] == cid)
     person.update(deepcopy(PROFILES[profile]))
     for field in ("name", "position", "style", "color", "robe"):
@@ -53,7 +59,7 @@ def load_debate():
 connections = {}
 with st.sidebar:
     st.markdown("### The director’s chair")
-    mode = st.radio("Voices", ["Demo", "Live AI"], help="Demo uses scripted exchanges. Live AI uses each orator's own OpenAI connection.")
+    mode = st.radio("Voices", ["Demo", "Live AI"], help="Demo uses scripted exchanges. Live AI uses each orator's own OpenAI connection.", on_change=stop_sequence)
     st.caption("Two minds. Two connections. Use the same model or give each a different one.")
     st.caption("Both key fields are editable. Leave the second key blank to reuse the first; enter a second key to use a separate account. Models are always independent.")
     for c in state["cast"]:
@@ -110,6 +116,7 @@ with cast_tab:
                                   robe=st.color_picker("Robe color", c.get("robe", "#ece3cb"), key=f'robe_{c["id"]}')))
         if st.form_submit_button("Save orators", type="primary"):
             if all(c["name"].strip() and c["position"].strip() for c in edits):
+                stop_sequence()
                 state["cast"] = edits
                 receipt("Orators saved. Their next turns will use these settings.")
                 st.rerun()
@@ -125,7 +132,9 @@ with debate_tab:
     stage, discussion = st.columns([1.45, 1], gap="large")
     with stage:
         turns = [x for x in state["log"] if x["speaker"] != "moderator"]
-        garden(cast=state["cast"], lines=turns[-4:], revision=state["revision"], key="garden", default=None)
+        playback_event = garden(cast=state["cast"], lines=turns[-4:], revision=state["revision"],
+                                waiting=st.session_state.get("sequence", {}).get("waiting"),
+                                sequence_id=st.session_state.get("sequence", {}).get("id"), key="garden", default=None)
         st.caption("Drag to orbit · Scroll to explore · Home returns to the gathering · Sound is optional")
         for col, c in zip(st.columns(2), state["cast"]):
             with col:
@@ -137,6 +146,7 @@ with debate_tab:
                 st.caption("Beginning a new debate clears the current discussion. Download it first if you want to keep it.")
                 if st.form_submit_button("Begin new debate"):
                     if topic.strip():
+                        stop_sequence()
                         replacement = new_debate(topic.strip(), state["cast"])
                         replacement["revision"] = state["revision"] + 1
                         st.session_state.debate = replacement
@@ -162,28 +172,57 @@ with debate_tab:
                 st.text(idea["idea"])
                 if idea["open_question"]:
                     st.caption("Still open: " + idea["open_question"])
-        st.caption(f'Next to speak: {next_name}. Every batch stops after two turns, giving you the floor.')
+        st.caption(f'Next to speak: {next_name}. Each reply appears before the next one is requested.')
         if "turn_error" in st.session_state:
             st.error(st.session_state.pop("turn_error"))
+        cycles = st.select_slider("Conversation length · exchanges", options=[1, 2, 3, 4, 5], value=2,
+                                  help="Each exchange is two alternating turns. One API call per turn in Live AI.")
+        st.caption(f"Up to {cycles * 2} turns. Reading pace and Pause are below the garden. Stop prevents further requests; a request already in progress may finish.")
+        running = "sequence" in st.session_state
         a, b = st.columns(2)
-        one = a.button("Next argument", type="primary", disabled=len(state["log"]) >= 60, use_container_width=True)
-        two = b.button("One exchange · 2 turns", disabled=len(state["log"]) >= 60, use_container_width=True)
-        if one or two:
-            for _ in range(2 if two else 1):
-                if len(state["log"]) >= 60:
-                    break
-                cid = state["next"]
-                key, model = connections[cid]
-                name = next(c["name"] for c in state["cast"] if c["id"] == cid)
-                try:
-                    if mode == "Live AI" and (not key or not model):
-                        raise ValueError(f"Enter {name}'s key and model in the sidebar, or switch to Demo.")
-                    with st.spinner(f"{name} is considering the argument…"):
-                        answer = reply(state, cid, key, model) if mode == "Live AI" else demo_reply(state, cid)
-                    add_reply(state, cid, answer, model if mode == "Live AI" else "Demo")
-                except ValueError as exc:
-                    st.session_state.turn_error = str(exc)
-                    break
+        one = a.button("Next argument", disabled=running or len(state["log"]) >= 60, use_container_width=True)
+        start = b.button("Start conversation", type="primary", disabled=running or len(state["log"]) >= 60, use_container_width=True)
+        stop = st.button("Stop conversation", disabled=not running, use_container_width=True)
+        if stop:
+            stop_sequence()
+            receipt("Conversation stopped. You can moderate or start another sequence.")
+            st.rerun()
+        if start:
+            if mode == "Live AI" and any(not all(connection) for connection in connections.values()):
+                st.error("Set up a key and model for both orators before starting a conversation.")
+            else:
+                st.session_state.sequence = start_sequence(cycles)
+        sequence = st.session_state.get("sequence")
+        produce = one or bool(start and sequence)
+        if sequence and acknowledge(sequence, playback_event):
+            if sequence["remaining"] > 0:
+                produce = True
+            else:
+                stop_sequence()
+                receipt("Conversation complete. The floor is yours.")
+                st.rerun()
+        if sequence:
+            done = sequence["total"] - sequence["remaining"]
+            st.info(f"Conversation · {done} of {sequence['total']} turns delivered · waiting for the current subtitle before continuing")
+        if produce:
+            if len(state["log"]) >= 60:
+                stop_sequence()
+                receipt("This debate has reached its limit. Download it before beginning a new one.")
+                st.rerun()
+            cid = state["next"]
+            key, model = connections[cid]
+            name = next(c["name"] for c in state["cast"] if c["id"] == cid)
+            try:
+                if mode == "Live AI" and (not key or not model):
+                    raise ValueError(f"Enter {name}'s key and model in the sidebar, or switch to Demo.")
+                with st.spinner(f"{name} is considering the argument…"):
+                    answer = reply(state, cid, key, model) if mode == "Live AI" else demo_reply(state, cid)
+                add_reply(state, cid, answer, model if mode == "Live AI" else "Demo")
+                if sequence:
+                    wait_for_reading(sequence, state["log"][-1]["id"])
+            except ValueError as exc:
+                stop_sequence()
+                st.session_state.turn_error = str(exc)
             st.rerun()
         with st.expander("The moderator’s lectern"):
             st.caption("Ask for an example, challenge an assumption, redirect the discussion, or invite a closing statement. Both orators see your intervention on their next turn.")
@@ -191,6 +230,7 @@ with debate_tab:
                 direction = st.text_area("Your question or direction", max_chars=2000)
                 if st.form_submit_button("Address the gathering"):
                     try:
+                        stop_sequence()
                         moderate(state, direction)
                         receipt("Moderator intervention added. Both orators will see it on their next turn.")
                         st.rerun()
