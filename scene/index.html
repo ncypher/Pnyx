@@ -1,0 +1,17 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pnyx · The gathering</title>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#111827;color:#f3eee4;font:14px/1.5 system-ui,sans-serif}
+#stage{position:relative;height:470px;overflow:hidden;border:1px solid #48515a;border-radius:22px;background:radial-gradient(ellipse at 28% 25%,#ce92734a,transparent 50%),linear-gradient(#313344,#293e4e 65%,#192c36)}canvas{display:block;touch-action:none}
+#title{position:absolute;top:18px;left:18px;color:#efcf9c;font-size:10px;letter-spacing:.22em;background:#202837bc;border:1px solid #696052;border-radius:30px;padding:8px 12px;pointer-events:none}
+button{background:#263442;border:1px solid #53616d;color:#ece5d7;border-radius:22px;padding:8px 12px;font:12px system-ui;cursor:pointer}button:hover{background:#3c4b55}button:disabled{opacity:.4;cursor:default}button:focus-visible{outline:2px solid #e9b86c;outline-offset:3px}
+#home{position:absolute;right:16px;top:16px}#controls{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-top:10px}#status{font-size:11px;color:#aab8c2;margin-left:auto}
+#cue{position:absolute;left:45%;top:35%;padding:5px 10px;border:1px solid var(--voice,#e9b86c);border-radius:12px;background:#172330ed;font-size:19px;pointer-events:none}#cue:after{content:'';position:absolute;bottom:-5px;left:calc(50% - 4px);width:8px;height:8px;transform:rotate(45deg);background:#172330;border-right:1px solid var(--voice);border-bottom:1px solid var(--voice)}
+#subtitle{border:1px solid #384b58;background:linear-gradient(120deg,#243140,#1a2836);border-radius:14px;padding:14px 18px;margin-top:12px;min-height:126px}#speaker{font-size:12px;color:#e9b86c}#quote{font:16px/1.6 Georgia,serif;margin-top:6px;max-height:130px;overflow:auto;overflow-wrap:anywhere}#move{color:#aebdc6;font-size:10px;text-transform:uppercase;letter-spacing:.15em;float:right}
+#fallback{display:none;position:absolute;inset:100px 25px auto;background:#172330;padding:20px;border-radius:12px}.label{position:absolute;pointer-events:none;transform:translate(-50%,-50%);font-size:11px;border-radius:15px;padding:3px 9px;background:#1b263bd9;color:#f3eee4}
+@media(max-width:480px){#stage{height:380px}#title{font-size:8px;left:10px}#home{right:10px}#quote{font-size:15px}#status{width:100%;margin:0}}
+</style></head><body>
+<div id="stage" role="group" aria-label="Two Athenian orators in a miniature island garden"><div id="title">PNYX · THE GOLDEN HOUR</div><button id="home">Home ↺</button><div id="cue" hidden>•••</div><div id="fallback">The garden could not render on this device. The debate controls and transcript are still available.</div></div>
+<div id="controls"><button id="replay" disabled>Replay exchange</button><button id="pause" disabled>Pause</button><button id="sound" aria-pressed="false">Sound off</button><span id="status">The floor is open</span></div>
+<section id="subtitle" aria-live="polite"><strong id="speaker">A question hangs in the air.</strong><span id="move"></span><div id="quote" tabindex="0">Two perspectives. Neither has to leave unchanged.</div></section>
+<script type="module" src="./scene.js"></script></body></html>
