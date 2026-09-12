@@ -3,7 +3,7 @@ from copy import deepcopy
 import html
 import streamlit as st
 import streamlit.components.v1 as components
-from engine import DEFAULTS, TOPICS, new_debate, add_reply, moderate, demo_reply, export_debate, transcript
+from engine import DEFAULTS, TOPICS, new_debate, add_reply, moderate, demo_reply, export_debate, transcript, idea_thread
 from dialogue import reply, check
 from profiles import PROFILES, DEBATES
 
@@ -55,14 +55,14 @@ with st.sidebar:
     st.markdown("### The director’s chair")
     mode = st.radio("Voices", ["Demo", "Live AI"], help="Demo uses scripted exchanges. Live AI uses each orator's own OpenAI connection.")
     st.caption("Two minds. Two connections. Use the same model or give each a different one.")
-    shared = st.checkbox("Use the first key for both orators", value=True, key="shared_key", on_change=invalidate, args=("b",))
+    st.caption("Both key fields are editable. Leave the second key blank to reuse the first; enter a second key to use a separate account. Models are always independent.")
     for c in state["cast"]:
         cid = c["id"]
         with st.expander(f'{c["name"]} · connection', expanded=mode == "Live AI"):
-            entered = st.text_input("OpenAI API key", type="password", key=f"key_{cid}", on_change=invalidate, args=(cid,), disabled=cid == "b" and shared)
-            key = connections["a"][0] if cid == "b" and shared else entered
-            if cid == "b" and shared:
-                st.caption("Using the first orator's key. This orator still has its own model choice.")
+            entered = st.text_input("OpenAI API key", type="password", key=f"key_{cid}", on_change=invalidate, args=(cid,))
+            key = connections["a"][0] if cid == "b" and not entered.strip() else entered
+            if cid == "b":
+                st.caption("Using this orator's separate key." if entered.strip() else "Using the first orator's key when available. Enter a key here to override it.")
             model = st.text_input("Model", value="gpt-4.1-mini", key=f"model_{cid}", on_change=invalidate, args=(cid,))
             connections[cid] = (key.strip(), model.strip())
             if st.button("Test connection", key=f"test_{cid}", disabled=not key.strip() or not model.strip()):
@@ -154,6 +154,14 @@ with debate_tab:
                 color = next((c["color"] for c in state["cast"] if c["id"] == item["speaker"]), "#c0afd9")
                 st.markdown(f'<div class="argument" style="--ink:{color}"><strong>{esc(item["name"])}</strong> <small>· {esc(item["move"])} · {esc(item["source"])}</small><p>{esc(item["text"])}</p></div>', unsafe_allow_html=True)
         next_name = next(c["name"] for c in state["cast"] if c["id"] == state["next"])
+        with st.expander("The thread of ideas"):
+            st.caption("Each turn carries these attributed claims and open questions into the next prompt, along with the full discussion. Memory lasts for this debate (up to 60 entries).")
+            for idea in idea_thread(state):
+                link = f' → replying to #{idea["responds_to"] + 1}' if idea["responds_to"] is not None else ""
+                st.markdown(f'**#{idea["id"] + 1} · {esc(idea["name"])}{link}**')
+                st.text(idea["idea"])
+                if idea["open_question"]:
+                    st.caption("Still open: " + idea["open_question"])
         st.caption(f'Next to speak: {next_name}. Every batch stops after two turns, giving you the floor.')
         if "turn_error" in st.session_state:
             st.error(st.session_state.pop("turn_error"))

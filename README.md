@@ -12,7 +12,7 @@ Under **Shape the orators**, apply Socratic, Stoic, Mill-inspired, care-ethics, 
 
 ### If live dialogue does not start
 
-Select **Live AI**. **Use the first key for both orators** is on by default; enter your key once and choose each model separately. Turn it off for separate accounts. Test each connection: the test now checks the same JSON dialogue format used by actual turns. The app distinguishes missing settings, authentication/access problems, timeouts, incomplete output, and invalid reply format. Tests and turns use API credits.
+Select **Live AI**. Both key fields are always editable. Leave the second blank to reuse the first key, or enter a second key to use a separate account. Choose each model independently. Test each connection: the test checks the same JSON dialogue format used by actual turns. The app distinguishes missing settings, authentication/access problems, timeouts, incomplete output, and invalid reply format. Tests and turns use API credits.
 
 Browser-extension messages and iframe feature warnings do not report the server-side API result. If a turn fails, use the message shown inside Pnyx to diagnose it. No raw API error text or key is shown. JSON output is requested explicitly; a model supporting the Responses API and JSON mode is required.
 
@@ -21,7 +21,8 @@ A miniature Athenian-inspired debate garden built with Streamlit and Three.js. T
 ## In the garden
 
 - A floating terrace, olive tree, ruined columns, torchlight, and two animated orators.
-- Small speaker cues with full subtitles below the scene, replay, pause, and optional synthesized mumbling.
+- Small speaker cues with full subtitles below the scene, replay, pause, manual subtitle advance, and relaxed/standard reading pace.
+- Optional soft two-note chimes distinguish the orators at a handoff. No continuous mumbling; sound starts off and has a volume control.
 - Separate OpenAI API keys and model names for each orator. Use the same model or compare two different text models available to your accounts.
 - Connection tests with clear success/error feedback. Changing a key or model clears its previous result.
 - Editable starting positions and speaking styles with save confirmation.
@@ -53,6 +54,10 @@ Each model call plays exactly one speaker. Its instructions require a specific r
 
 Debates stop at 60 entries so the full discussion remains bounded. Begin a new debate to reset the discussion while keeping your character settings. Download first if you want to keep the old discussion.
 
+**The thread of ideas** displays each saved claim, its link to the opponent's preceding turn, and any open question. This attributed chain is appended to every live prompt alongside the full transcript. It is a record of the speakers' claims, not an independent factual summary. Moderator directions remain in the chain. It does not persist beyond the current debate unless downloaded.
+
+Subtitles allow at least ten seconds and scale with word count (150 words/minute in Relaxed mode, 195 in Standard). New replies append to the playback queue rather than interrupting the current subtitle. Pause preserves remaining reading time. Switching away from the tab pauses playback; resume when ready. **Next subtitle** skips forward without making an API call.
+
 ## Session and privacy
 
 API keys stay in Streamlit's server session. They are never passed to the Three.js component, logs, or downloads. Character settings and conversation text are sent to OpenAI during live turns, with `store=False`. Connection tests send only a short test prompt. Pnyx adds no automatic disk saves or analytics. State may be lost when the session disconnects or reloads. Downloads preserve the discussion, but importing a saved debate is not yet supported. Do not enter sensitive information into a public demo.
@@ -64,6 +69,7 @@ The characters are fictional and the environment is stylized, not a historical r
 ```sh
 python -m unittest discover -s tests -v
 node --check scene/scene.js
+node --test tests/playback.test.mjs
 ```
 
 Tests cover speaker order, moderator context, independent connection routing, secret-safe failures, and the Streamlit demo/settings flow. Mocked API tests do not establish live account access.

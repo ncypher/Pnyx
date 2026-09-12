@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {readingTime, mergeQueue} from './playback.mjs';
 import {OrbitControls} from './vendor/OrbitControls.js';
 const $=s=>document.querySelector(s),stage=$('#stage');
 const send=(type,rest={})=>parent.postMessage({isStreamlitMessage:true,type,...rest},'*');
@@ -56,25 +57,42 @@ try{
  }
  person(0,-1.25,.2,.65);person(1,1.25,.2,-.65);
  const motes=[];for(let i=0;i<20;i++){const m=ball(scene,0,0,0,.017,new THREE.MeshBasicMaterial({color:'#f4dbac'}));motes.push(m);}
- let current=null,queue=[],index=0,timer=null,paused=false,until=0,signature='',audio=null,sound=false,nextTone=0;
+ let current=null,queue=[],index=0,timer=null,paused=false,until=0,signature='',audio=null,sound=false,finished=true,remaining=0;
  const cue=$('#cue');
- function show(line){current=line;until=performance.now()+Math.min(14000,Math.max(4500,(line?.text.length||0)*38));cue.hidden=!line;
+ function show(line){current=line;remaining=readingTime(line?.text,$('#pace').value);until=performance.now()+remaining;finished=!line;cue.hidden=!line;
   const c=state.cast.find(c=>c.id===line?.speaker);cue.style.setProperty('--voice',c?.color||'#e9b86c');cue.textContent=line?.move==='question'?'?':line?.move==='concession'?'≈':'•••';
   $('#speaker').textContent=line?.name||'A question hangs in the air.';$('#speaker').style.color=c?.color||'#e9b86c';$('#move').textContent=line?.move||'';
-  $('#quote').textContent=line?.text||'Two perspectives. Neither has to leave unchanged.';$('#quote').scrollTop=0;requestAnimationFrame(height);
+  $('#quote').textContent=line?.text||'Two perspectives. Neither has to leave unchanged.';$('#quote').scrollTop=0;if(line&&!paused)chime(state.cast.findIndex(c=>c.id===line.speaker));requestAnimationFrame(height);
  }
- function schedule(){clearTimeout(timer);$('#pause').disabled=!queue.length;$('#pause').textContent=paused?'Resume':'Pause';$('#status').textContent=queue.length?`${paused?'Paused · ':''}${index+1} / ${queue.length}`:'The floor is open';if(paused||!queue.length)return;
-  timer=setTimeout(()=>{if(index+1<queue.length){show(queue[++index]);schedule();}else{$('#pause').disabled=true;$('#status').textContent='The floor returns to you';}},Math.max(1000,until-performance.now()));
+ function schedule(){
+  clearTimeout(timer);$('#pause').disabled=finished;$('#skip').disabled=finished;
+  $('#pause').textContent=paused?'Resume':'Pause';
+  $('#status').textContent=finished?(queue.length?'The floor returns to you':'The floor is open'):`${paused?'Paused · ':''}${index+1} / ${queue.length}`;
+  if(paused||finished)return;
+  timer=setTimeout(advance,Math.max(100,until-performance.now()));
  }
+ function advance(){if(index+1<queue.length){show(queue[++index]);}else{finished=true;until=0;}schedule();}
  function play(lines){queue=lines;index=0;paused=false;show(queue[0]);schedule();}
- $('#replay').onclick=()=>play(state.lines||[]);$('#pause').onclick=()=>{paused=!paused;if(!paused)until=performance.now()+6000;schedule();};
- $('#sound').onclick=async()=>{try{audio ||= new (window.AudioContext||window.webkitAudioContext)();sound=!sound;if(sound)await audio.resume();else await audio.suspend();$('#sound').textContent=sound?'Sound on':'Sound off';$('#sound').setAttribute('aria-pressed',String(sound));}catch{sound=false;$('#sound').textContent='Sound unavailable';}};
- function mumble(i){if(!sound||!audio||audio.state!=='running'||document.hidden||audio.currentTime<nextTone)return;const t=audio.currentTime;nextTone=t+.23+Math.random()*.15;const o=audio.createOscillator(),f=audio.createBiquadFilter(),g=audio.createGain();o.type='sawtooth';o.frequency.value=(i?115:165)*(1+Math.random()*.15);f.type='bandpass';f.Q.value=3;f.frequency.setValueAtTime(350,t);f.frequency.exponentialRampToValueAtTime(900,t+.08);f.frequency.exponentialRampToValueAtTime(400,t+.2);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.03,t+.03);g.gain.linearRampToValueAtTime(0,t+.23);o.connect(f);f.connect(g);g.connect(audio.destination);o.start(t);o.stop(t+.24);o.onended=()=>{o.disconnect();f.disconnect();g.disconnect();};}
+ $('#replay').onclick=()=>play(state.lines||[]);
+ $('#skip').onclick=advance;
+ $('#pause').onclick=()=>{paused=!paused;if(paused)remaining=Math.max(0,until-performance.now());else until=performance.now()+remaining;schedule();};
+ $('#pace').onchange=()=>{remaining=readingTime(current?.text,$('#pace').value);until=performance.now()+remaining;schedule();};
+ document.addEventListener('visibilitychange',()=>{if(document.hidden&&!paused&&!finished){paused=true;remaining=Math.max(0,until-performance.now());schedule();}});
+ $('#sound').onclick=async()=>{try{audio ||= new (window.AudioContext||window.webkitAudioContext)();sound=!sound;if(sound)await audio.resume();else await audio.suspend();$('#sound').textContent=sound?'Chimes on':'Chimes off';$('#sound').setAttribute('aria-pressed',String(sound));if(sound)chime(state.cast.findIndex(c=>c.id===current?.speaker));}catch{sound=false;$('#sound').textContent='Sound unavailable';}};
+ // A short two-note signature at the handoff; no continuous speech imitation.
+ function chime(i){
+  if(!sound||!audio||audio.state!=='running'||document.hidden)return;
+  const notes=i===1?[392,329.63]:[293.66,440];
+  notes.forEach((frequency,j)=>{const t=audio.currentTime+j*.22,o=audio.createOscillator(),g=audio.createGain();
+   o.type='sine';o.frequency.value=frequency;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.06*Number($('#volume').value)/100,t+.025);g.gain.exponentialRampToValueAtTime(.0001,t+.55);
+   o.connect(g);g.connect(audio.destination);o.start(t);o.stop(t+.6);o.onended=()=>{o.disconnect();g.disconnect();};
+  });
+ }
  let lastId=-1,lastRevision=-1;
- apply=()=>{people.forEach((p,i)=>{p.label.textContent=state.cast[i].name;p.robe.color.set(state.cast[i].robe||'#ece3cb');p.accent.color.set(state.cast[i].color);p.ring.material.color.set(state.cast[i].color);});const lines=state.lines||[],sig=JSON.stringify([state.revision,lines.map(x=>x.id)]);$('#replay').disabled=!lines.length;if(sig!==signature){const fresh=state.revision===lastRevision?lines.filter(x=>x.id>lastId):lines;signature=sig;lastRevision=state.revision;lastId=lines.at(-1)?.id??-1;play(fresh.length?fresh:lines);}};apply();
+ apply=()=>{people.forEach((p,i)=>{p.label.textContent=state.cast[i].name;p.robe.color.set(state.cast[i].robe||'#ece3cb');p.accent.color.set(state.cast[i].color);p.ring.material.color.set(state.cast[i].color);});const lines=state.lines||[],sig=JSON.stringify([state.revision,lines.map(x=>x.id)]);$('#replay').disabled=!lines.length;if(sig!==signature){const sameDebate=state.revision===lastRevision;const fresh=sameDebate?lines.filter(x=>x.id>lastId):lines;signature=sig;lastRevision=state.revision;lastId=lines.at(-1)?.id??-1;if(sameDebate&&!finished){queue=mergeQueue(queue,fresh,true);schedule();}else{play(fresh.length?fresh:lines);}}};apply();
  function resize(){const w=stage.clientWidth,h=stage.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();height();}new ResizeObserver(resize).observe(stage);new ResizeObserver(height).observe($('#subtitle'));resize();
  const clock=new THREE.Clock(),point=new THREE.Vector3(),reduced=matchMedia('(prefers-reduced-motion: reduce)');
- renderer.setAnimationLoop(()=>{const t=clock.getElapsedTime();orbit.update();camera.updateMatrixWorld();people.forEach((p,i)=>{const active=current?.speaker===state.cast[i].id,talking=active&&!paused&&performance.now()<until;p.ring.visible=active;if(talking)mumble(i);
+ renderer.setAnimationLoop(()=>{const t=clock.getElapsedTime();orbit.update();camera.updateMatrixWorld();people.forEach((p,i)=>{const active=current?.speaker===state.cast[i].id,talking=active&&!paused&&performance.now()<until;p.ring.visible=active;
   if(!reduced.matches){p.body.position.y=Math.sin(t*1.7+i)*.012;p.head.rotation.z=Math.sin(t*1.5+i)*.04;p.arms[0].rotation.z=talking?.4+Math.sin(t*3)*.15:.08;p.arms[1].rotation.x=talking?-.25+Math.sin(t*2)*.12:0;p.mouth.scale.y=talking?2+Math.sin(t*13):1;}
   p.head.getWorldPosition(point);point.y+=.48;point.project(camera);const x=(point.x*.5+.5)*stage.clientWidth,y=(-point.y*.5+.5)*stage.clientHeight;p.label.style.left=`${x}px`;p.label.style.top=`${y}px`;p.label.hidden=active;
   if(active){cue.style.left=`${Math.max(8,Math.min(stage.clientWidth-60,x-25))}px`;cue.style.top=`${Math.max(56,y-25)}px`;}

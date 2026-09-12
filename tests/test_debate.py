@@ -90,5 +90,34 @@ class DebateTests(unittest.TestCase):
         self.assertEqual(app.text_input(key='name_b').value, 'Machine citizen')
         self.assertEqual(len(app.exception), 0)
 
+    def test_separate_key_overrides_fallback_in_app(self):
+        from types import SimpleNamespace
+        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'), default_timeout=30).run()
+        app.radio[0].set_value('Live AI').run()
+        self.assertFalse(app.text_input(key='key_b').disabled)
+        app.text_input(key='key_a').input('fake-left').run()
+        app.text_input(key='key_b').input('fake-right').run()
+        app.text_input(key='model_b').input('different-model').run()
+        with patch('dialogue.connect') as connect:
+            connect.return_value = SimpleNamespace(status='completed', output_text='{"text":"Reply","claim":"Claim","move":"challenge","open_question":"What follows?"}')
+            next(b for b in app.button if b.label == 'One exchange · 2 turns').click().run()
+            self.assertEqual(connect.call_args_list[0].args[0], 'fake-left')
+            self.assertEqual(connect.call_args_list[1].args[:2], ('fake-right','different-model'))
+            second_context = json.loads(connect.call_args_list[1].args[2])
+            self.assertEqual(second_context['idea_thread'][0]['open_question'], 'What follows?')
+
+    def test_idea_chain_is_attributed_and_retains_early_points(self):
+        from engine import idea_thread
+        s = new_debate()
+        for _ in range(12):
+            add_reply(s, s['next'], demo_reply(s, s['next']), 'Demo')
+        moderate(s, 'Return to the first point.')
+        chain = context_for(s, s['next'])['idea_thread']
+        self.assertEqual(chain[0]['idea'], s['log'][0]['claim'])
+        self.assertEqual(chain[1]['responds_to'], 0)
+        self.assertEqual(chain[-1]['speaker'], 'moderator')
+        self.assertEqual(len(chain), 13)
+        self.assertIn(s['log'][0]['claim'], s['log'][0]['text'])
+
 if __name__ == '__main__':
     unittest.main()

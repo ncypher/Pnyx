@@ -21,7 +21,14 @@ def context_for(state, speaker):
     opponent = next(c for c in state["cast"] if c["id"] != speaker)
     latest = next((x for x in reversed(state["log"]) if x["speaker"] == opponent["id"]), None)
     return dict(topic=state["topic"], your_character=person, opponent=opponent,
-                opponent_latest_argument=latest, debate=deepcopy(state["log"]))
+                opponent_latest_argument=latest, idea_thread=idea_thread(state), debate=deepcopy(state["log"]))
+
+def idea_thread(state):
+    """An attributed chain drawn from saved turns, not an invented summary."""
+    return [dict(id=e["id"], name=e["name"], speaker=e["speaker"],
+                 idea=e["text"] if e["speaker"] == "moderator" else e["claim"],
+                 responds_to=e.get("responds_to"), open_question=e.get("open_question", ""))
+            for e in state["log"]]
 
 def validate_reply(raw):
     obj = json.loads(raw)
@@ -31,6 +38,7 @@ def validate_reply(raw):
         if not isinstance(obj.get(field), str) or not obj[field].strip():
             raise ValueError("The reply was missing its argument. Try again.")
     return dict(text=obj["text"].strip()[:1800], claim=obj["claim"].strip()[:180],
+                open_question=obj.get("open_question", "").strip()[:240] if isinstance(obj.get("open_question", ""), str) else "",
                 move=obj.get("move") if obj.get("move") in ("opening", "challenge", "concession", "question", "synthesis") else "challenge")
 
 def add_reply(state, speaker, reply, source):
@@ -39,7 +47,8 @@ def add_reply(state, speaker, reply, source):
     if len(state["log"]) >= 60:
         raise ValueError("This debate has reached 60 entries. Download it and begin a new debate.")
     person = next(c for c in state["cast"] if c["id"] == speaker)
-    state["log"].append(dict(id=len(state["log"]), speaker=speaker, name=person["name"], source=source, **reply))
+    previous = next((e["id"] for e in reversed(state["log"]) if e["speaker"] not in (speaker, "moderator")), None)
+    state["log"].append(dict(reply, id=len(state["log"]), speaker=speaker, name=person["name"], source=source, responds_to=previous))
     state["next"] = "b" if speaker == "a" else "a"
 
 def moderate(state, text):
@@ -54,13 +63,14 @@ def demo_reply(state, speaker):
     last = ctx["opponent_latest_argument"]
     intervention = next((e for e in reversed(state["log"]) if e["speaker"] == "moderator"), None)
     intro = f'On “{state["topic"]}”, my starting position is: {ctx["your_character"]["position"]}'
+    point = ctx["your_character"]["position"][:180]
     if last:
         intro = f'{ctx["opponent"]["name"]}, your point was “{last["claim"]}”. '
-        intro += ["I accept the intention, but who carries the cost when it fails?", "That is a fair objection. Can we test it against a case where the individual and the city disagree?", "Then we share a concern about harm. Our disagreement is who should decide what counts as harm."][len(state["log"]) % 3]
+        point = ["I accept the intention, but who carries the cost when it fails?", "That is a fair objection. Can we test it against a case where the individual and the city disagree?", "Then we share a concern about harm. Our disagreement is who should decide what counts as harm."][len(state["log"]) % 3]
+        intro += point
     if intervention:
         intro += f' The moderator asks: “{intervention["text"][:200]}”. That gives us a useful test for the next exchange.'
-    claims = ["Freedom needs room for experiments and mistakes.", "A choice is not fully free when others carry its costs.", "Good rules should leave room for exceptions.", "Shared responsibility needs limits on who holds power."]
-    return dict(text=intro, claim=claims[len(state["log"]) % 4], move="opening" if not last else "question")
+    return dict(text=intro, claim=point, open_question=point if point.endswith("?") else "", move="opening" if not last else "question")
 
 def export_debate(state):
     return json.dumps(dict(version=1, **state), ensure_ascii=False, indent=2)
